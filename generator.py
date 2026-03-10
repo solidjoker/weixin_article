@@ -31,7 +31,7 @@ def select_random_laureate() -> dict:
     return random.choice(LAUREATES)
 
 
-def generate_article(laureate: dict, article_type: str = None, theme: str = None) -> Tuple[str, str]:
+def generate_article(laureate: dict = None, article_type: str = None, theme: str = None) -> Tuple[str, str]:
     """
     使用 GLM 生成文章
     返回: (标题, 正文)
@@ -39,8 +39,37 @@ def generate_article(laureate: dict, article_type: str = None, theme: str = None
     if not article_type:
         article_type = random.choice(ARTICLE_TYPES)
     
-    # 主题部分
-    theme_section = f"""
+    # 判断是否是融合风格模式
+    is_fusion_mode = theme and "【风格融合要求】" in theme
+    
+    if is_fusion_mode:
+        # 融合风格模式：主题中已包含风格要求
+        style_prompt = f"""
+你是一位文学大师，擅长融合多种诺贝尔获奖者的写作风格。
+
+{theme}
+
+【任务要求】
+1. 写一篇{article_type}，字数在800-1000字
+2. 必须体现融合后的独特风格特征
+3. 语言要有质感，避免流水账
+4. 标题要有文学性，不要用"论xxx"这种学术式标题
+5. 深度思考，不要流于表面
+
+【输出格式】
+第一行是标题（不要序号、不要书名号）
+空一行
+然后是正文
+
+现在开始创作：
+"""
+    else:
+        # 单一作家模式
+        if not laureate:
+            laureate = select_random_laureate()
+        
+        # 主题部分
+        theme_section = f"""
 【指定主题】
 {theme}
 
@@ -49,9 +78,9 @@ def generate_article(laureate: dict, article_type: str = None, theme: str = None
 【主题自选】
 可以是：记忆、身份、日常、自然、时间、人性等
 """
-    
-    # 构建风格提示
-    style_prompt = f"""
+        
+        # 构建风格提示
+        style_prompt = f"""
 你是一位模仿大师，现在要模仿诺贝尔{laureate['category']}得主 {laureate['name']} 的写作风格。
 
 【作家信息】
@@ -89,7 +118,10 @@ def generate_article(laureate: dict, article_type: str = None, theme: str = None
         "max_tokens": 2000
     }
     
-    print(f"📝 正在生成文章（模仿 {laureate['name']}，{article_type}）...")
+    if is_fusion_mode:
+        print(f"📝 正在生成文章（融合风格，{article_type}）...")
+    else:
+        print(f"📝 正在生成文章（模仿 {laureate['name']}，{article_type}）...")
     
     response = requests.post(GLM_API_URL, headers=headers, json=payload, timeout=60)
     
@@ -264,14 +296,23 @@ def main():
         if os.path.exists(theme_file):
             with open(theme_file, "r", encoding="utf-8") as f:
                 theme = f.read().strip()
-            print(f"\n📌 指定主题: {theme}")
+            # 提取主题摘要（第一行）
+            theme_summary = theme.split('\n')[0]
+            print(f"\n📌 指定主题: {theme_summary}")
             # 使用后删除，避免重复
             os.remove(theme_file)
         
-        # 1. 随机选择获奖者
-        laureate = select_random_laureate()
-        print(f"\n🎲 今日获奖者: {laureate['name']} ({laureate['year']}年 {laureate['category']})")
-        print(f"   风格: {laureate['style']}")
+        # 判断是否是融合风格模式
+        is_fusion_mode = theme and "【风格融合要求】" in theme
+        
+        if is_fusion_mode:
+            print(f"\n🎭 融合风格模式")
+            laureate = None
+        else:
+            # 1. 随机选择获奖者
+            laureate = select_random_laureate()
+            print(f"\n🎲 今日获奖者: {laureate['name']} ({laureate['year']}年 {laureate['category']})")
+            print(f"   风格: {laureate['style']}")
         
         # 2. 生成文章
         title, body = generate_article(laureate, theme=theme)
@@ -279,7 +320,8 @@ def main():
         print(f"   字数: {len(body)} 字")
         
         # 3. 生成配图
-        image_path = generate_image_for_article(title, body, laureate)
+        style_for_image = laureate['style'] if laureate else "融合多种文学风格，存在主义，记忆与时间，社会学视角"
+        image_path = generate_image_for_article(title, body, {"style": style_for_image})
         
         # 4. 获取微信 access_token
         access_token = get_wechat_access_token()
@@ -298,7 +340,8 @@ def main():
         # 保存今日记录
         record = {
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "laureate": laureate,
+            "mode": "fusion" if is_fusion_mode else "single",
+            "laureate": laureate if laureate else "融合风格：加缪+石黑一雄+阿马蒂亚·森+多丽丝·莱辛+莫言",
             "title": title,
             "word_count": len(body),
             "image_path": image_path,
