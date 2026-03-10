@@ -31,13 +31,24 @@ def select_random_laureate() -> dict:
     return random.choice(LAUREATES)
 
 
-def generate_article(laureate: dict, article_type: str = None) -> Tuple[str, str]:
+def generate_article(laureate: dict, article_type: str = None, theme: str = None) -> Tuple[str, str]:
     """
     使用 GLM 生成文章
     返回: (标题, 正文)
     """
     if not article_type:
         article_type = random.choice(ARTICLE_TYPES)
+    
+    # 主题部分
+    theme_section = f"""
+【指定主题】
+{theme}
+
+请围绕这个主题创作，结合作家的风格特点来展开。
+""" if theme else """
+【主题自选】
+可以是：记忆、身份、日常、自然、时间、人性等
+"""
     
     # 构建风格提示
     style_prompt = f"""
@@ -49,12 +60,12 @@ def generate_article(laureate: dict, article_type: str = None) -> Tuple[str, str
 - 获奖年份：{laureate['year']}年
 - 风格特点：{laureate['style']}
 
+{theme_section}
 【任务要求】
 1. 写一篇{article_type}，字数在800-1000字
 2. 必须体现该作家的核心风格特征
 3. 语言要有质感，避免流水账
-4. 主题自选，可以是：记忆、身份、日常、自然、时间、人性等
-5. 标题要有文学性，不要用"论xxx"这种学术式标题
+4. 标题要有文学性，不要用"论xxx"这种学术式标题
 
 【输出格式】
 第一行是标题（不要序号、不要书名号）
@@ -247,13 +258,23 @@ def main():
     print("=" * 50)
     
     try:
+        # 检查是否有指定主题文件
+        theme_file = os.path.join(PROJECT_DIR, "theme.txt")
+        theme = None
+        if os.path.exists(theme_file):
+            with open(theme_file, "r", encoding="utf-8") as f:
+                theme = f.read().strip()
+            print(f"\n📌 指定主题: {theme}")
+            # 使用后删除，避免重复
+            os.remove(theme_file)
+        
         # 1. 随机选择获奖者
         laureate = select_random_laureate()
         print(f"\n🎲 今日获奖者: {laureate['name']} ({laureate['year']}年 {laureate['category']})")
         print(f"   风格: {laureate['style']}")
         
         # 2. 生成文章
-        title, body = generate_article(laureate)
+        title, body = generate_article(laureate, theme=theme)
         print(f"\n📄 文章标题: {title}")
         print(f"   字数: {len(body)} 字")
         
